@@ -163,12 +163,40 @@ function solve(grid: Grid) {
 
     cell.setValue(cell.getValue() + 1)
 
-    
+    if (cell.getValue() > 9) {
+      cell.setValue(0)
+      backtracking = true
+      i = grid.previousCell(i, j)[0]
+      j = grid.previousCell(i, j)[1]
+      continue
+    }
 
+    // updateGrid
+
+    while (!(check("row", grid, i, j) && check("column", grid, i, j) && check("box", grid, i, j))) {
+      // updateGrid
+      cell.setValue(cell.getValue() + 1)
+      if (cell.getValue() > 9) {
+        cell.setValue(0)
+        backtracking = true
+        break
+      }
+    }
+
+    if (backtracking) {
+      i = grid.previousCell(i, j)[0]
+      j = grid.previousCell(i, j)[1]
+      continue
+    }
+
+    if (grid.nextCell(i, j)[0] == -1) {
+      return grid
+    } else {
+      i = grid.nextCell(i, j)[0]
+      j = grid.nextCell(i, j)[1]
+    }
   }
 }
-
-  
 
 export default function App() {
   return (
