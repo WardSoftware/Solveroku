@@ -1,7 +1,11 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import GridView from './components/GridView';
+import BottomRow from './components/BottomRow';
+import CellView from './components/CellView';
 
-class Cell {
+export class Cell {
   fixed: Boolean;
   value: number;
   row: number;
@@ -34,23 +38,46 @@ class Cell {
       return true;
     }
   }
-  
 }
 
-class Grid {
+export class Grid {
   grid: Cell[][] = [];
-  constructor(gridList: number[]) {
-    for (let i = 0; i < 10; i++) {
-      let row: Cell[] = []
-      for (let j = 0; j < 10; j++) {
-        if (gridList[i * 9 + j] != 0) {
-          row.push(new Cell(true, gridList[i * 9 + j], i, j));
-        } else {
+
+  constructor(gridList?: number[]) {
+    if (gridList) {
+      for (let i = 0; i < 9; i++) {
+        var row: Cell[] = []
+        for (let j = 0; j < 9; j++) {
+          if (gridList[i * 9 + j] != 0) {
+            row.push(new Cell(true, gridList[i * 9 + j], i, j));
+          } else {
+            row.push(new Cell(false, 0, i, j))
+          }
+        }
+        this.grid.push(row)
+      }
+    } else {
+      for (let i = 0; i < 9; i++) {
+        var row: Cell[] = []
+        for (let j = 0; j < 9; j++) {
           row.push(new Cell(false, 0, i, j))
         }
+        this.grid.push(row)
       }
-      this.grid.push(row)
     }
+    
+  }
+
+  solvingCellValue(selected, setSelected, val: number) {
+    let i = selected[0]
+    let j = selected[1]
+
+    this.grid[i][j] = new Cell(false, val, i, j)
+
+    setSelected([8, 8])
+    setSelected([8, 7])
+    setSelected([i, j])
+
   }
 
   getCell(row: number, column: number) {
@@ -64,7 +91,7 @@ class Grid {
       }
     }
 
-    if (column == 0) {
+    if (column <= 0) {
       return [row - 1, 8]
     }
     return [row, column - 1]
@@ -117,10 +144,60 @@ class Grid {
     return box
   }
 
-  printGrid() {
+  updateCell(selected, setSelected, val: number) {
+    let i = selected[0]
+    let j = selected[1]
+    if (val == 0) {
+      this.grid[i][j] = new Cell(false, 0, i, j)
+    } else {
+      this.grid[i][j] = new Cell(true, val, i, j)
+    }
 
-    // Will update the displayed grid. Won't be necessary as the view will use a state variable.
-    return 0
+    setSelected([8, 8])
+    setSelected([8, 7])
+    setSelected([i, j])
+    
+  }
+
+  incrementCell(selected, setSelected) {
+    let i = selected[0]
+    let j = selected[1]
+    if (this.getCell(i, j).getFixed()) {
+      return false
+    } else {
+      this.grid[i][j] = new Cell(false, this.getCell(i, j).getValue(), i, j)
+    }
+
+    setSelected([8, 8])
+    setSelected([8, 7])
+    setSelected([i, j])
+  }
+
+  resetCell(selected, setSelected) {
+    let i = selected[0]
+    let j = selected[1]
+    if (this.getCell(i, j).getFixed()) {
+      return false
+    } else {
+      this.grid[i][j] = new Cell(false, 0, i, j)
+    }
+
+    setSelected([8, 8])
+    setSelected([8, 7])
+    setSelected([i, j])
+  }
+
+  printGrid() {
+    var thisgrid = []
+
+    for (var i of this.grid) {
+      var tmp = []
+      for (var j of i) {
+        tmp.push(j.getValue())
+      }
+      thisgrid.push(tmp)
+    }
+    return thisgrid
   }
 }
 
@@ -144,30 +221,39 @@ function check(cond: String, grid: Grid, row: number, column: number) {
   return true
 }
 
-function solve(grid: Grid) {
-  var i = 0
-  var j = 0
+function solve(grid: Grid, selected, setSelected) {
+  setSelected([0, 0])
+  console.log('hello')
+
   var backtracking = false
   while (true) {
-    var cell = grid.getCell(i, j)
-    
+    let i = selected[0]
+    let j = selected[1]
+
+    console.log(grid.getCell(i, j).getValue())
+
     if (backtracking) {
-      if (cell.getFixed()) {
-        i = grid.previousCell(i, j)[0]
-        j = grid.previousCell(i, j)[1]
+      if (grid.getCell(i, j).getFixed()) {
+        if (grid.previousCell(i, j)[0] == -1) {
+          break
+        }
+        setSelected(grid.previousCell(i, j))
         continue
       } else {
         backtracking = false
       }
     }
 
-    cell.setValue(cell.getValue() + 1)
+    grid.incrementCell(selected, setSelected)
+    
 
-    if (cell.getValue() > 9) {
-      cell.setValue(0)
+    if (grid.getCell(i, j).getValue() > 9) {
+      grid.resetCell(selected, setSelected)
       backtracking = true
-      i = grid.previousCell(i, j)[0]
-      j = grid.previousCell(i, j)[1]
+      if (grid.previousCell(i, j)[0] == -1) {
+        break
+      }
+      setSelected(grid.previousCell(i, j))
       continue
     }
 
@@ -175,44 +261,77 @@ function solve(grid: Grid) {
 
     while (!(check("row", grid, i, j) && check("column", grid, i, j) && check("box", grid, i, j))) {
       // updateGrid
-      cell.setValue(cell.getValue() + 1)
-      if (cell.getValue() > 9) {
-        cell.setValue(0)
+      grid.incrementCell(selected, setSelected)
+      if (grid.getCell(i, j).getValue() > 9) {
+        grid.resetCell(selected, setSelected)
         backtracking = true
         break
       }
     }
 
     if (backtracking) {
-      i = grid.previousCell(i, j)[0]
-      j = grid.previousCell(i, j)[1]
+      if (grid.previousCell(i, j)[0] == -1) {
+        break
+      }
+      setSelected(grid.previousCell(i, j))
       continue
     }
 
     if (grid.nextCell(i, j)[0] == -1) {
       return grid
     } else {
-      i = grid.nextCell(i, j)[0]
-      j = grid.nextCell(i, j)[1]
+      setSelected(grid.nextCell(i, j))
     }
   }
 }
 
 export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
 
+  const [grid, setGrid] = useState(new Grid())
+
+  const [selected, setSelected] = useState([0, 0])
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <GridView selected={selected} setSelected={setSelected} grid={grid} />
       <StatusBar style="auto" />
-    </View>
+      <View style={{flex: 1}}/>
+      <View style={{flexDirection: "row"}}>
+        <TouchableOpacity onPress={() => {
+          grid.updateCell(selected, setSelected, 0)
+        }} style={{...styles.solveButton, width: "40%"}}>
+          <Text>Clear Cell</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setGrid(new Grid())} style={{...styles.solveButton, width: "40%"}}>
+          <Text>Clear Grid</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <TouchableOpacity onPress={() => solve(grid, selected, setSelected)} style={styles.solveButton}>
+        <Text>Solve</Text>
+      </TouchableOpacity>
+      <BottomRow onPress={(val) => {
+        grid.updateCell(selected, setSelected, val)
+      }}/>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  solveButton: {
+    backgroundColor: '#eeeeee',
+    width: '85%',
+    margin: 10,
+    height: 60,
+    padding: 20,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 });
