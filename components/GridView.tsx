@@ -11,9 +11,9 @@ function setSelected(i, j) {
 export default function GridView(props) {
     
     return (
-        <View style={{paddingTop: 50}}>
+        <View style={{}}>
             {props.grid.printGrid().map((row, index) => {
-                return <GridRow selected={props.selected} setSelected={props.setSelected} row={row} i={index} key={index}/>
+                return <GridRow color={props.color} grid={props.grid} correctGrid={props.correctGrid} selected={props.selected} setSelected={props.setSelected} setEditable={props.setEditable} row={row} i={index} key={index}/>
             })}
             
         </View>

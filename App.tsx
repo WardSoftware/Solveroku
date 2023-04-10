@@ -1,9 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import rgb, { Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Slider } from '@miblanchard/react-native-slider';
 import GridView from './components/GridView';
 import BottomRow from './components/BottomRow';
-import CellView from './components/CellView';
+import ColorPicker from 'react-native-wheel-color-picker'
+import { Colors } from 'react-native/Libraries/NewAppScreen';
+import { useNetInfo } from '@react-native-community/netinfo'
+import { Feather } from '@expo/vector-icons'
+import * as FileSystem from 'expo-file-system'
+
+const ip = "http://192.168.0.36:5000"
 
 export class Cell {
   fixed: Boolean;
@@ -66,18 +73,6 @@ export class Grid {
       }
     }
     
-  }
-
-  solvingCellValue(selected, setSelected, val: number) {
-    let i = selected[0]
-    let j = selected[1]
-
-    this.grid[i][j] = new Cell(false, val, i, j)
-
-    setSelected([8, 8])
-    setSelected([8, 7])
-    setSelected([i, j])
-
   }
 
   getCell(row: number, column: number) {
@@ -147,10 +142,10 @@ export class Grid {
   updateCell(selected, setSelected, val: number) {
     let i = selected[0]
     let j = selected[1]
-    if (val == 0) {
-      this.grid[i][j] = new Cell(false, 0, i, j)
+    if (this.grid[i][j].getFixed()) {
+      return;
     } else {
-      this.grid[i][j] = new Cell(true, val, i, j)
+      this.grid[i][j] = new Cell(false, val, i, j);
     }
 
     setSelected([8, 8])
@@ -221,16 +216,22 @@ function check(cond: String, grid: Grid, row: number, column: number) {
   return true
 }
 
-function solve(grid: Grid, selected, setSelected) {
+async function solve(grid: Grid, selected, setSelected) {
+  // const response = await fetch(ip + "/solve", {
+  //   method: "POST", // *GET, POST, PUT, DELETE, etc.
+  //   headers: {
+  //     "Content-Type": "application/json",
+  //   },
+  //   body: {
+  //     "sudoku": grid.printGrid()
+  //   }
+  // })
   setSelected([0, 0])
-  console.log('hello')
 
   var backtracking = false
   while (true) {
     let i = selected[0]
     let j = selected[1]
-
-    console.log(grid.getCell(i, j).getValue())
 
     if (backtracking) {
       if (grid.getCell(i, j).getFixed()) {
@@ -285,15 +286,172 @@ function solve(grid: Grid, selected, setSelected) {
   }
 }
 
+function checkEditable(selected, setSelected, grid, setEditable) {
+  const i = selected[0]
+  const j = selected[1]
+  if (grid.grid[i][j].getFixed()) {
+    setEditable(false)
+  } else {
+    setEditable(true)
+  }
+
+}
+
+async function getNewGrid(netInfo, setGrid: React.Dispatch<React.SetStateAction<Grid>>, setCorrectGrid: React.Dispatch<React.SetStateAction<Grid>>, difficulty: number) {
+  console.log("GETTING SUDOKU")
+  var serverResponse;
+  try {
+    let r = await fetch(ip+"/message").catch(e => serverResponse = false)
+    serverResponse = r.status == 200
+  } catch {
+    serverResponse = false
+  }
+  
+  console.log(serverResponse)
+
+  if (netInfo.isConnected && serverResponse) {
+    fetch(ip+"/sudoku?difficulty=" + difficulty.toString()).then(r => {
+      r.json().then(json => {
+        var newGridInput = []
+        var correctNewGridInput = []
+        for (var i = 0; i < 81; i++) {
+          newGridInput.push(Number(json['puzzle'][i]))
+          correctNewGridInput.push(Number(json['solution'][i]))
+        }
+  
+        setGrid(new Grid(newGridInput))
+        setCorrectGrid(new Grid(correctNewGridInput))
+      })
+    })
+  } else {
+    let str = await FileSystem.readAsStringAsync(FileSystem.documentDirectory + "data.csv")
+    let rows = str.split("\n")
+    let puzzles = []
+    for (var i of rows) {
+      puzzles.push(i.split(","))
+    }
+    puzzles = puzzles.filter((puzzle) => ((Number(puzzle[2]) < (difficulty - 2)) || (Number(puzzle[2]) < (difficulty + 2))))
+
+    // console.log(puzzles)
+    
+    const randomIndex = Math.floor((Math.random() * 1000000000) % puzzles.length)
+
+    console.log(randomIndex)
+    var newGridInput = []
+    var correctNewGridInput = []
+    for (var j = 0; j < 81; j++) {
+      newGridInput.push(Number(puzzles[randomIndex][0][j]))
+      correctNewGridInput.push(Number(puzzles[randomIndex][1][j]))
+    }
+
+    setGrid(new Grid(newGridInput))
+    setCorrectGrid(new Grid(correctNewGridInput))
+  }
+}
+
+async function updateLocalDB() {
+  console.log("updating database")
+  var puzzles: string[][] = []
+  var solutions: string[][] = []
+  var difficulties: string[][] = []
+  var r = await fetch(ip+"/localUpdate")
+  var json = await r.json()
+  puzzles = json['puzzles']
+  solutions = json['solutions']
+  difficulties = json['difficulties']
+    
+  var rows = ""
+
+  for (var m in puzzles) {
+    rows += `${puzzles[m]},${solutions[m]},${difficulties[m]}\n`
+  }
+
+  const headerString = 'puzzle,solution,difficulty\n'
+  
+  const csvString = `${headerString}${rows}`
+
+  console.log(csvString)
+
+  // console.log(rows)
+
+  const path = FileSystem.documentDirectory + "data.csv"
+  // pathToWrite /storage/emulated/0/Download/data.csv
+  FileSystem.writeAsStringAsync(path, csvString)
+}
+
+function componentToHex(c) {
+  var hex = c.toString(16);
+  return hex.length == 1 ? "0" + hex : hex;
+}
+
+function rgbToHex(r, g, b) {
+  return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+}
+
+function darkenColor(color: string): string {
+  var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+  var r;
+  var g;
+  var b;
+  if (result) {
+      r = parseInt(result[1], 16)
+      g = parseInt(result[2], 16)
+      b = parseInt(result[3], 16)
+  } else {
+      return color
+  }
+
+  return rgbToHex((r - 30), g - 30, b - 30);
+  
+}
+
+const setColorFn = (color: string, setColor, selected, setSelected) => {
+  console.log(darkenColor(darkenColor(darkenColor("#bae1ff"))))
+  setColor([color, darkenColor(color), darkenColor(darkenColor(color))])
+  const i = selected[0] 
+  const j = selected[1]
+  setSelected([8, 8])
+  setSelected([8, 7])
+  setSelected([i, j])
+}
+
 export default function App() {
 
+  const netInfo = useNetInfo();
+
+  useEffect(() => {
+    if (netInfo.isConnected) {
+      updateLocalDB()
+    }
+  }, [netInfo])
+  
+
   const [grid, setGrid] = useState(new Grid())
+
+  const [color, setColor] = useState(["#ffffff", "#efefef", "#dfdfdf"]);
+
+  const [correctGrid, setCorrectGrid] = useState(new Grid());
+
+  const [selectedEditable, setEditable] = useState(true);
+
+  const [difficulty, setDifficulty] = useState(40)
 
   const [selected, setSelected] = useState([0, 0])
 
   return (
     <SafeAreaView style={styles.container}>
-      <GridView selected={selected} setSelected={setSelected} grid={grid} />
+      <View style={{flexDirection: 'row', alignItems: 'stretch'}}>
+        <TouchableOpacity onPress={() => setColorFn('#ffb3ba', setColor, selected, setSelected)} style={{width: 30, margin: 20, marginBottom: 0, height: 30, backgroundColor: '#ffb3ba', borderRadius: 50}}/>
+        <TouchableOpacity onPress={() => setColorFn('#efcfaa', setColor, selected, setSelected)} style={{width: 30, margin: 20, marginBottom: 0, height: 30, backgroundColor: '#ffdfba', borderRadius: 50}}/>
+        <TouchableOpacity onPress={() => setColorFn('#efeb9a', setColor, selected, setSelected)} style={{width: 30, margin: 20, marginBottom: 0, height: 30, backgroundColor: '#fffbaa', borderRadius: 50}}/>
+        <TouchableOpacity onPress={() => setColorFn('#aaefb9', setColor, selected, setSelected)} style={{width: 30, margin: 20, marginBottom: 0, height: 30, backgroundColor: '#baffc9', borderRadius: 50}}/>
+        <TouchableOpacity onPress={() => setColorFn('#bae1ff', setColor, selected, setSelected)} style={{width: 30, margin: 20, marginBottom: 0, height: 30, backgroundColor: '#bae1ff', borderRadius: 50}}/>
+      </View>
+      <View style={{flex: 1, width: "90%", paddingBottom: 0, marginBottom: 0, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between'}}>
+        <Feather size={20} name={netInfo.isConnected ? "wifi" : "wifi-off"} /> 
+        <Text>Difficulty: {difficulty}</Text>
+      </View>
+      <GridView color={color} selected={selected} setSelected={setSelected} setEditable={setEditable} grid={grid} correctGrid={correctGrid} />
       <StatusBar style="auto" />
       <View style={{flex: 1}}/>
       <View style={{flexDirection: "row"}}>
@@ -307,10 +465,17 @@ export default function App() {
         </TouchableOpacity>
       </View>
       
-      <TouchableOpacity onPress={() => solve(grid, selected, setSelected)} style={styles.solveButton}>
+      {/* <TouchableOpacity onPress={() => solve(grid, selected, setSelected)} style={styles.solveButton}>
         <Text>Solve</Text>
+      </TouchableOpacity> */}
+      <Text>Difficulty: {difficulty}%</Text>
+      <View style={{...styles.solveButton, padding:15, alignItems: "stretch"}}>
+        <Slider minimumValue={0} maximumValue={100}  step={1} value={difficulty} onValueChange={v => setDifficulty(v)} />
+      </View>  
+      <TouchableOpacity style={styles.solveButton} onPress={() => getNewGrid(netInfo, setGrid, setCorrectGrid, difficulty)}>
+        <Text>Get Sudoku</Text>
       </TouchableOpacity>
-      <BottomRow onPress={(val) => {
+      <BottomRow grid={grid} disabled={!(selectedEditable)} onPress={(val) => {
         grid.updateCell(selected, setSelected, val)
       }}/>
     </SafeAreaView>
