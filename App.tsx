@@ -10,7 +10,7 @@ import { useNetInfo } from '@react-native-community/netinfo'
 import { Feather } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system'
 
-const ip = "http://192.168.0.36:5000"
+const ip = "http://80.43.68.165:5000"
 
 export class Cell {
   fixed: Boolean;
@@ -406,7 +406,6 @@ function darkenColor(color: string): string {
 }
 
 const setColorFn = (color: string, setColor, selected, setSelected) => {
-  console.log(darkenColor(darkenColor(darkenColor("#bae1ff"))))
   setColor([color, darkenColor(color), darkenColor(darkenColor(color))])
   const i = selected[0] 
   const j = selected[1]
